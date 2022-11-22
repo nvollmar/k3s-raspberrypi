@@ -1,0 +1,5 @@
+---
+
+- import_tasks: storage_class.yml
+
+- import_tasks: deployment.yml

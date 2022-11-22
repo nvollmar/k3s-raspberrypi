@@ -1,0 +1,204 @@
+---
+
+- name: "Create radarr config"
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: radarr-config
+        namespace: apps
+        labels:
+          app: radarr
+      data:
+        config.xml: |-
+          <Config>
+            <LogLevel>info</LogLevel>
+            <UrlBase>/radarr</UrlBase>
+            <UpdateMechanism>Docker</UpdateMechanism>
+            <BindAddress>*</BindAddress>
+            <Port>7878</Port>
+            <SslPort>9898</SslPort>
+            <EnableSsl>False</EnableSsl>
+            <LaunchBrowser>True</LaunchBrowser>
+            <ApiKey>0d07feea7af144d48b9486e009c49ccd</ApiKey>
+            <AuthenticationMethod>None</AuthenticationMethod>
+            <Branch>master</Branch>
+            <SslCertPath></SslCertPath>
+            <SslCertPassword></SslCertPassword>
+            <InstanceName>Radarr</InstanceName>
+          </Config>
+
+- name: "Create radarr deployment"
+  k8s:
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: StatefulSet
+      metadata:
+        name: radarr
+        namespace: apps
+        labels:
+          app: radarr
+      spec:
+        replicas: 1
+        podManagementPolicy: OrderedReady
+        strategy:
+          type: Recreate
+        selector:
+          matchLabels:
+            app: radarr
+        template:
+          metadata:
+            labels:
+              app: radarr
+            annotations:
+              prometheus.io/port: "9793"
+              prometheus.io/scrape: "true"
+          spec:
+            restartPolicy: Always
+            serviceAccountName: default
+            automountServiceAccountToken: true
+            dnsPolicy: ClusterFirst
+            enableServiceLinks: true
+            initContainers:
+              - name: init-config
+                image: alpine:3.6
+                securityContext:
+                  runAsUser: 0
+                  privileged: true
+                command: ["/bin/sh", "-c"]
+                args:
+                  - >
+                    if [ ! -f /config/config.xml ]; then
+                      echo "copy initial configuration"
+                      cp /config.xml /config/
+                    else
+                      echo "volume already initialized"
+                    fi
+                volumeMounts:
+                  - name: radarr-storage
+                    mountPath: /config
+                  - name: radarr-config
+                    mountPath: /config.xml
+                    subPath: config.xml
+            containers:
+              - name: radarr
+                image: "linuxserver/radarr:{{ radarr_image_tag }}"
+                imagePullPolicy: IfNotPresent
+                env:
+                  - name: TZ
+                    value: "Europe/Zurich"
+                  - name: PUID
+                    value: "980"
+                  - name: PGID
+                    value: "999" # media group
+                ports:
+                  - name: http
+                    containerPort: 7878
+                    protocol: TCP
+                  - name: metrics
+                    containerPort: 9793
+                    protocol: TCP
+                resources:
+                  limits:
+                    cpu: 400m
+                    memory: 400Mi
+                  requests:
+                    cpu: 100m
+                    memory: 200Mi
+                livenessProbe:
+                  exec:
+                    command:
+                      - /usr/bin/env
+                      - bash
+                      - -c
+                      - curl --fail localhost:7878/radarr/api/v3/system/status?apiKey=`IFS=\> && while read -d
+                        \< E C; do if [[ $E = "ApiKey" ]]; then echo $C; fi; done < /config/config.xml`
+                  failureThreshold: 5
+                  initialDelaySeconds: 60
+                  periodSeconds: 10
+                  successThreshold: 1
+                  timeoutSeconds: 10
+                readinessProbe:
+                  tcpSocket:
+                    port: 7878
+                  initialDelaySeconds: 60
+                  failureThreshold: 5
+                  timeoutSeconds: 2
+                  periodSeconds: 10
+                volumeMounts:
+                  - name: radarr-storage
+                    mountPath: /config
+                  - name: radarr-movies
+                    mountPath: /movies
+              - name: exporter
+                image: ghcr.io/onedr0p/exportarr:v1.1.0
+                imagePullPolicy: IfNotPresent
+                args:
+                  - radarr
+                env:
+                  - name: URL
+                    value: http://localhost:7878/radarr
+                  - name: APIKEY
+                    value: "0d07feea7af144d48b9486e009c49ccd"
+                  - name: PORT
+                    value: "9793"
+                  - name: ENABLE_ADDITIONAL_METRICS
+                    value: "false"
+                  - name: ENABLE_UNKNOWN_QUEUE_ITEMS
+                    value: "false"
+                  - name: LOG_LEVEL
+                    value: "WARN"
+                ports:
+                  - containerPort: 9793
+                    name: metrics
+                readinessProbe:
+                  tcpSocket:
+                    port: 9793
+                  initialDelaySeconds: 60
+                  failureThreshold: 5
+                  timeoutSeconds: 2
+                  periodSeconds: 10
+            volumes:
+              - name: radarr-config
+                configMap:
+                  name: radarr-config
+                  defaultMode: 0777
+              - name: radarr-movies
+                emptyDir: { }
+        volumeClaimTemplates:
+          - apiVersion: v1
+            kind: PersistentVolumeClaim
+            metadata:
+              name: radarr-storage
+            spec:
+              accessModes:
+                - ReadWriteOnce
+              resources:
+                requests:
+                  storage: 1.5G
+              storageClassName: local-storage
+              volumeMode: Filesystem
+
+- name: "Create radarr service"
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: radarr
+        namespace: apps
+        labels:
+          app: radarr
+      spec:
+        type: ClusterIP
+        selector:
+          app: radarr
+        ports:
+          - name: http
+            port: 7878
+            targetPort: http
+            protocol: TCP

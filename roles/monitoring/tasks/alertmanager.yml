@@ -1,0 +1,42 @@
+---
+
+- name: "Create AlertManager"
+  k8s:
+    state: present
+    definition:
+      apiVersion: monitoring.coreos.com/v1
+      kind: Alertmanager
+      metadata:
+        name: monitoring
+        namespace: monitoring
+      spec:
+        version: "{{ alertmanager_image_tag }}"
+        replicas: 1
+
+- name: "Create AlertManager discovery service"
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: alertmanager-discovery
+        namespace: monitoring
+        labels:
+          app: alertmanager
+      spec:
+        type: ClusterIP
+        selector:
+          alertmanager: monitoring
+        resources:
+          limits:
+            cpu: 200m
+            memory: 400Mi
+          requests:
+            cpu: 100m
+            memory: 200Mi
+        ports:
+          - name: web
+            port: 9093
+            protocol: TCP
+            targetPort: web

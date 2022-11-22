@@ -1,0 +1,60 @@
+---
+
+- name: "Create dashboard ingress"
+  k8s:
+    state: present
+    definition:
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      metadata:
+        name: dashboard
+        namespace: apps
+        labels:
+          app: dashboard
+        annotations:
+          kubernetes.io/ingress.class: traefik
+          traefik.ingress.kubernetes.io/router.entrypoints: websecure
+          traefik.ingress.kubernetes.io/router.tls: "true"
+      spec:
+        tls:
+          - hosts: [ "{{ k3s_domain }}" ]
+            secretName: traefik-ingress-tls
+        rules:
+          - host: "{{ k3s_domain }}"
+            http:
+              paths:
+                - path: /
+                  pathType: Prefix
+                  backend:
+                    service:
+                      name: dashboard
+                      port:
+                        name: web
+
+- name: "Create dashboard ingress network policy"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: dashboard-ingress-in
+        namespace: apps
+        labels:
+          app: dashboard
+          context: ingress
+      spec:
+        podSelector:
+          matchLabels:
+            app: dashboard
+        ingress:
+          - from:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: kube-system
+                podSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: traefik
+            ports:
+              - protocol: TCP
+                port: 8080

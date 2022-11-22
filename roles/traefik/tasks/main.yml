@@ -1,0 +1,20 @@
+---
+
+- name: "Create traefik ingress tls secret"
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      type: Opaque
+      metadata:
+        name: traefik-ingress-tls
+        namespace: "{{ item }}"
+        labels:
+          app: traefik
+      data:
+        tls.crt: "{{ lookup('file', 'k3s.crt') | string | b64encode }}"
+        tls.key: "{{ lookup('file', 'k3s.key') | string | b64encode }}"
+  with_items:
+    - monitoring
+    - apps

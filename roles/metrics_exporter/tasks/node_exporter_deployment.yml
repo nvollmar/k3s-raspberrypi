@@ -1,0 +1,152 @@
+---
+
+- name: "Create node exporter cluster role binding"
+  k8s:
+    state: present
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: node-exporter
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: node-exporter
+      subjects:
+        - kind: ServiceAccount
+          name: node-exporter
+          namespace: monitoring
+
+- name: "Create node exporter cluster role"
+  k8s:
+    state: present
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      metadata:
+        name: node-exporter
+      rules:
+        - apiGroups:
+            - authentication.k8s.io
+          resources:
+            - tokenreviews
+          verbs:
+            - create
+        - apiGroups:
+            - authorization.k8s.io
+          resources:
+            - subjectaccessreviews
+          verbs:
+            - create
+
+- name: "Create node exporter service account"
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: node-exporter
+        namespace: monitoring
+
+- name: "Create node exporter service"
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: node-exporter
+        namespace: monitoring
+        labels:
+          app: node-exporter
+      spec:
+        clusterIP: None
+        ports:
+          - name: https
+            port: 9100
+            targetPort: https
+        selector:
+          app: node-exporter
+
+- name: "Create node exporter daemon set"
+  k8s:
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: DaemonSet
+      metadata:
+        name: node-exporter
+        namespace: monitoring
+        labels:
+          app: node-exporter
+      spec:
+        selector:
+          matchLabels:
+            app: node-exporter
+        template:
+          metadata:
+            labels:
+              app: node-exporter
+            annotations:
+              prometheus.io/port: "9100"
+              prometheus.io/scrape: "true"
+          spec:
+            containers:
+              - image: "quay.io/prometheus/node-exporter:{{ node_exporter_image_tag }}"
+                name: node-exporter
+                args:
+                  - --web.listen-address=[$(IP)]:9100
+                  - --path.sysfs=/host/sys
+                  - --path.rootfs=/host/root
+                  - --no-collector.wifi
+                  - --no-collector.hwmon
+                  - --collector.filesystem.ignored-mount-points=^/(dev|proc|sys|var/lib/docker/.+|var/lib/kubelet/pods/.+)($|/)
+                  - --collector.netclass.ignored-devices=^(veth.*)$
+                  - --collector.netdev.device-exclude=^(veth.*)$
+                env:
+                  - name: IP
+                    valueFrom:
+                      fieldRef:
+                        fieldPath: status.podIP
+                ports:
+                  - containerPort: 9100
+                    hostPort: 9100
+                    name: https
+                resources:
+                  limits:
+                    cpu: 250m
+                    memory: 180Mi
+                  requests:
+                    cpu: 102m
+                    memory: 180Mi
+                volumeMounts:
+                  - mountPath: /host/sys
+                    mountPropagation: HostToContainer
+                    name: sys
+                    readOnly: true
+                  - mountPath: /host/root
+                    mountPropagation: HostToContainer
+                    name: root
+                    readOnly: true
+            hostNetwork: true
+            hostPID: true
+            nodeSelector:
+              kubernetes.io/os: linux
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 65534
+            serviceAccountName: node-exporter
+            tolerations:
+              - operator: Exists
+            volumes:
+              - hostPath:
+                  path: /sys
+                name: sys
+              - hostPath:
+                  path: /
+                name: root
+        updateStrategy:
+          rollingUpdate:
+            maxUnavailable: 1
+          type: RollingUpdate

@@ -1,0 +1,31 @@
+---
+
+- import_tasks: prowlarr_deployment.yml
+
+- import_tasks: prowlarr_ingress.yml
+
+- import_tasks: prowlarr_network.yml
+
+- import_tasks: lidarr_deployment.yml
+
+- import_tasks: lidarr_ingress.yml
+
+- import_tasks: lidarr_network.yml
+
+- import_tasks: radarr_deployment.yml
+
+- import_tasks: radarr_ingress.yml
+
+- import_tasks: radarr_network.yml
+
+- import_tasks: sonarr_deployment.yml
+
+- import_tasks: sonarr_ingress.yml
+
+- import_tasks: sonarr_network.yml
+
+- import_tasks: readarr_deployment.yml
+
+- import_tasks: readarr_ingress.yml
+
+- import_tasks: readarr_network.yml

@@ -1,0 +1,281 @@
+---
+
+- name: "Create truenas graphite exporter config"
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: graphite-exporter-truenas-config
+        namespace: monitoring
+        labels:
+          app: graphite-exporter
+          comp: truenas
+      data:
+        graphite_mapping.conf: |-
+          mappings:
+            - match: 'servers\.([^_]*)_([^_]*)_([^.]*)\.disk\.([^.]*)\.(.*)'
+              match_type: regex
+              name: "truenas_${5}"
+              labels:
+                server: "${1}.${2}.${3}"
+                device: "${4}"
+                resource: "storage"
+          
+            - match: 'servers\.([^_]*)_([^_]*)_([^.]*)\.disktemp\.([^.]*)\.(.*)'
+              match_type: regex
+              name: "truenas_disk_${5}"
+              labels:
+                server: "${1}.${2}.${3}"
+                device: "${4}"
+                resource: "storage"
+
+            - match: 'servers\.([^_]*)_([^_]*)_([^.]*)\.df\.([^.]*)\.(.*)'
+              match_type: regex
+              name: "truenas_${5}"
+              labels:
+                server: "${1}.${2}.${3}"
+                resource: "storage"
+                filesystem: "${4}"
+                
+            - match: 'servers\.([^_]*)_([^_]*)_([^.]*)\.cpu\.([^.]*)\.(.*)'
+              match_type: regex
+              name: "truenas_${5}"
+              labels:
+                server: "${1}.${2}.${3}"
+                core: "${4}"
+                resource: "cpu"
+                
+            - match: 'servers\.([^_]*)_([^_]*)_([^.]*)\.aggregation\.cpu-([^.]*)\.(.*)'
+              match_type: regex
+              name: "truenas_${5}_${4}"
+              labels:
+                server: "${1}.${2}.${3}"
+                resource: "cpu"
+                
+            - match: 'servers\.([^_]*)_([^_]*)_([^.]*)\.memory\.([^.]*)\.(.*)'
+              match_type: regex
+              name: "truenas_${4}_${5}"
+              labels:
+                server: "${1}.${2}.${3}"
+                resource: "memory"
+                
+            - match: 'servers\.([^_]*)_([^_]*)_([^.]*)\.interface\.([^.]*)\.(.*)'
+              match_type: regex
+              name: "truenas_network_${5}"
+              labels:
+                server: "${1}.${2}.${3}"
+                interface: "${4}"
+                resource: "network"
+                
+            - match: 'servers\.([^_]*)_([^_]*)_([^.]*)\.swap\.([^.]*)\.(.*)'
+              match_type: regex
+              name: "truenas_swap_${5}"
+              labels:
+                server: "${1}.${2}.${3}"
+                resource: "memory"
+                
+            - match: 'servers\.([^_]*)_([^_]*)_([^.]*)\.processes\.([^.]*)\.(.*)'
+              match_type: regex
+              name: "truenas_process_${5}"
+              labels:
+                server: "${1}.${2}.${3}"
+                resource: "process"
+
+            - match: 'servers\.([^_]*)_([^_]*)_([^.]*)\.nfsstat\.([^.]*)\.nfsstat\.(.*)'
+              match_type: regex
+              name: "truenas_nfs_${4}_${5}"
+              labels:
+                server: "${1}.${2}.${3}"
+
+            - match: 'servers\.([^_]*)_([^_]*)_([^.]*)\.zfs_arc\.([^.]*)\.(.*)'
+              match_type: regex
+              name: "truenas_zfs_${4}_${5}"
+              labels:
+                server: "${1}.${2}.${3}"
+                resource: "filesystem"
+
+            - match: 'servers\.([^_]*)_([^_]*)_([^.]*)\.zfs_arc_v2\.([^.]*)\.(.*)'
+              match_type: regex
+              name: "truenas_zfs2_${4}_${5}"
+              labels:
+                server: "${1}.${2}.${3}"
+                resource: "filesystem"
+
+            - match: 'servers\.([^_]*)_([^_]*)_([^.]*)\.load\.([^.]*)\.(.*)'
+              match_type: regex
+              name: "truenas_${4}_${5}"
+              labels:
+                server: "${1}.${2}.${3}"
+
+            - match: 'servers\.([^_]*)_([^_]*)_([^.]*)\.geom_stat\.([^.]*)\.([^.]*)\.(.*)'
+              match_type: regex
+              name: "truenas_${4}_${6}"
+              labels:
+                server: "${1}.${2}.${3}"
+                device: "${5}"
+
+            - match: 'servers\.([^_]*)_([^_]*)_([^.]*)\.geom_stat\.([^.]*)\.(.*)'
+              match_type: regex
+              name: "truenas_${4}"
+              labels:
+                server: "${1}.${2}.${3}"
+                device: "${5}"
+          
+            - match: 'servers\.([^_]*)_([^_]*)_([^.]*)\.uptime\.uptime'
+              match_type: regex
+              name: "truenas_uptime"
+              labels:
+                server: "${1}.${2}.${3}"
+
+            - match: 'servers\.([^_]*)_([^_]*)_([^.]*)\.(.*)'
+              match_type: regex
+              name: "truenas_raw_${4}"
+              labels:
+                server: "${1}.${2}.${3}"
+
+- name: "Create truenas graphite exporter deployment"
+  k8s:
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: graphite-exporter-truenas
+        namespace: monitoring
+        labels:
+          app: graphite-exporter
+          comp: truenas
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: graphite-exporter
+            comp: truenas
+        strategy:
+          rollingUpdate:
+            maxSurge: 0
+            maxUnavailable: 1
+          type: RollingUpdate
+        template:
+          metadata:
+            labels:
+              app: graphite-exporter
+              comp: truenas
+            annotations:
+              prometheus.io/port: "9108"
+              prometheus.io/scrape: "true"
+          spec:
+            restartPolicy: Always
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 65534
+              fsGroup: 65534
+            terminationGracePeriodSeconds: 60
+            containers:
+              - name: graphite-exporter
+                image: "prom/graphite-exporter:{{ graphite_exporter_image_tag }}"
+                env: [ ]
+                args: [ "--graphite.mapping-config=/etc/graphite_mapping.conf" ]
+                ports:
+                  - containerPort: 9109
+                    name: graphite
+                  - containerPort: 9108
+                    name: metrics
+                readinessProbe:
+                  httpGet:
+                    path: /
+                    port: metrics
+                resources:
+                  limits:
+                    cpu: 400m
+                    memory: 400Mi
+                  requests:
+                    cpu: 100m
+                    memory: 100Mi
+                volumeMounts:
+                  - name: graphite-exporter-truenas-config
+                    mountPath: /etc/graphite_mapping.conf
+                    subPath: graphite_mapping.conf
+                    readOnly: true
+            volumes:
+              - name: graphite-exporter-truenas-config
+                configMap:
+                  name: graphite-exporter-truenas-config
+                  defaultMode: 420
+
+- name: "Create truenas graphite exporter service"
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: graphite-exporter-truenas
+        namespace: monitoring
+        labels:
+          app: graphite-exporter
+          comp: truenas
+      spec:
+        type: NodePort
+        selector:
+          app: graphite-exporter
+          comp: truenas
+        ports:
+          - name: graphite-tcp
+            nodePort: 30109
+            port: 9109
+            protocol: TCP
+            targetPort: graphite
+
+- name: "Create ingress network policy for scraping"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: graphite-exporter-scrape-in
+        namespace: monitoring
+        labels:
+          app: prometheus
+          comp: truenas
+          context: scraping
+      spec:
+        podSelector:
+          matchLabels:
+            app: graphite-exporter
+            comp: truenas
+        ingress:
+          - from:
+              - podSelector:
+                  matchLabels:
+                    prometheus: monitoring
+            ports:
+              - protocol: TCP
+                port: 9108
+
+- name: "Create truenas graphite exporter ingress network policy"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: graphite-exporter-ingress-in
+        namespace: monitoring
+        labels:
+          app: graphite-exporter
+          context: ingress
+      spec:
+        podSelector:
+          matchLabels:
+            app: graphite-exporter
+            comp: truenas
+        ingress:
+          - ports:
+              - port: 9109
+                protocol: UDP
+              - port: 9109
+                protocol: TCP

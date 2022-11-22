@@ -1,0 +1,75 @@
+---
+
+- name: "Create alertmanager ingress"
+  k8s:
+    state: present
+    definition:
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      metadata:
+        name: alertmanager
+        namespace: monitoring
+        labels:
+          app: alertmanager
+        annotations:
+          kubernetes.io/ingress.class: traefik
+          traefik.ingress.kubernetes.io/router.entrypoints: websecure
+          traefik.ingress.kubernetes.io/router.tls: "true"
+          traefik.ingress.kubernetes.io/router.middlewares: monitoring-alertmanager-stripprefix@kubernetescrd
+      spec:
+        tls:
+          - hosts: [ "{{ k3s_domain }}" ]
+            secretName: traefik-ingress-tls
+        rules:
+          - host: "{{ k3s_domain }}"
+            http:
+              paths:
+                - path: /alertmanager
+                  pathType: Prefix
+                  backend:
+                    service:
+                      name: alertmanager-discovery
+                      port:
+                        name: web
+
+- name: "Create alertmanager ingress middleware"
+  k8s:
+    state: present
+    definition:
+      apiVersion: traefik.containo.us/v1alpha1
+      kind: Middleware
+      metadata:
+        name: alertmanager-stripprefix
+        namespace: monitoring
+      spec:
+        stripPrefix:
+          prefixes:
+            - /alertmanager
+
+- name: "Create alertmanager ingress network policy"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: alertmanager-ingress-in
+        namespace: monitoring
+        labels:
+          app: alertmanager
+          context: ingress
+      spec:
+        podSelector:
+          matchLabels:
+            alertmanager: monitoring
+        ingress:
+          - from:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: kube-system
+                podSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: traefik
+            ports:
+              - protocol: TCP
+                port: 9093

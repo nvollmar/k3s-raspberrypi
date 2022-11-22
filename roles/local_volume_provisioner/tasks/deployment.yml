@@ -1,0 +1,133 @@
+---
+# adapted from https://github.com/kubernetes-sigs/sig-storage-local-static-provisioner/blob/master/deployment/kubernetes/example/default_example_provisioner_generated.yaml
+
+- name: "Create local storage config"
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: local-provisioner-config
+        namespace: kube-storage
+      data:
+        storageClassMap: |
+          local-storage:
+             hostDir: /mnt/data
+             mountDir:  /mnt/data
+             blockCleanerCommand:
+               - "/scripts/shred.sh"
+               - "2"
+             volumeMode: Filesystem
+             fsType: ext4
+             namePattern: "*"
+
+- name: "Create local storage provisioner daemon set"
+  k8s:
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: DaemonSet
+      metadata:
+        name: local-volume-provisioner
+        namespace: kube-storage
+        labels:
+          app: local-volume-provisioner
+      spec:
+        selector:
+          matchLabels:
+            app: local-volume-provisioner
+        template:
+          metadata:
+            labels:
+              app: local-volume-provisioner
+            annotations:
+              prometheus.io/port: "8080"
+              prometheus.io/scrape: "true"
+          spec:
+            serviceAccountName: local-storage-admin
+            containers:
+              - image: "registry.k8s.io/sig-storage/local-volume-provisioner:v2.4.0"
+                imagePullPolicy: "Always"
+                name: provisioner
+                securityContext:
+                  privileged: true
+                env:
+                  - name: MY_NODE_NAME
+                    valueFrom:
+                      fieldRef:
+                        fieldPath: spec.nodeName
+                volumeMounts:
+                  - mountPath: /etc/provisioner/config
+                    name: provisioner-config
+                    readOnly: true
+                  - mountPath: /mnt/data
+                    name: local-storage
+                    mountPropagation: "HostToContainer"
+            volumes:
+              - name: provisioner-config
+                configMap:
+                  name: local-provisioner-config
+              - name: local-storage
+                hostPath:
+                  path: /mnt/data
+
+- name: "Create local storage service account"
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: local-storage-admin
+        namespace: kube-storage
+
+- name: "Create local storage cluster role"
+  k8s:
+    state: present
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      metadata:
+        name: local-storage-provisioner-node-clusterrole
+      rules:
+        - apiGroups: [ "" ]
+          resources: [ "nodes" ]
+          verbs: [ "get" ]
+
+- name: "Create local storage pv cluster role binding"
+  k8s:
+    state: present
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: local-storage-provisioner-pv-binding
+        namespace: kube-storage
+      subjects:
+        - kind: ServiceAccount
+          name: local-storage-admin
+          namespace: kube-storage
+      roleRef:
+        kind: ClusterRole
+        name: system:persistent-volume-provisioner
+        apiGroup: rbac.authorization.k8s.io
+
+
+- name: "Create local storage node cluster role binding"
+  k8s:
+    state: present
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: local-storage-provisioner-node-binding
+        namespace: kube-storage
+      subjects:
+        - kind: ServiceAccount
+          name: local-storage-admin
+          namespace: kube-storage
+      roleRef:
+        kind: ClusterRole
+        name: local-storage-provisioner-node-clusterrole
+        apiGroup: rbac.authorization.k8s.io

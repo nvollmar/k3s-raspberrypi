@@ -1,0 +1,271 @@
+---
+
+- name: "Create egress network policy for dns"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: prometheus-dns-out
+        namespace: monitoring
+        labels:
+          app: prometheus
+          context: dns
+      spec:
+        podSelector:
+          matchLabels:
+            prometheus: monitoring
+        egress:
+          - to:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: kube-system
+            ports:
+              - protocol: TCP
+                port: 53
+              - protocol: UDP
+                port: 53
+
+- name: "Create ingress network policy for grafana"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: grafana-prometheus-in
+        namespace: monitoring
+        labels:
+          app: grafana
+          context: prometheus
+      spec:
+        podSelector:
+          matchLabels:
+            prometheus: monitoring
+        ingress:
+          - from:
+              - podSelector:
+                  matchLabels:
+                    app: grafana
+            ports:
+              - protocol: TCP
+                port: 9090
+
+- name: "Create egress network policy for alertmanager"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: prometheus-alertmanager-out
+        namespace: monitoring
+        labels:
+          app: prometheus
+          context: alertmanager
+      spec:
+        podSelector:
+          matchLabels:
+            prometheus: monitoring
+        egress:
+          - to:
+              - podSelector:
+                  matchLabels:
+                    alertmanager: monitoring
+            ports:
+              - protocol: TCP
+                port: 9093
+
+- name: "Create egress network policy to kubernetes API"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: prometheus-api-out
+        namespace: monitoring
+        labels:
+          app: prometheus
+          context: scraping
+      spec:
+        podSelector:
+          matchLabels:
+            prometheus: monitoring
+        egress:
+          - to:
+              - ipBlock:
+                  cidr: 10.43.0.1/32
+            ports:
+              - name: api
+                port: 443
+
+- name: "Create egress network policy for scraping"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: prometheus-scrape-out
+        namespace: monitoring
+        labels:
+          app: prometheus
+          context: scraping
+      spec:
+        podSelector:
+          matchLabels:
+            prometheus: monitoring
+        egress:
+          - to:
+              - ipBlock:
+                  cidr: "{{ k3s_master_ip }}/32"
+            ports:
+              - name: api
+                protocol: TCP
+                port: 6443
+          - to:
+              - ipBlock:
+                  cidr: "{{ k3s_network }}"
+            ports:
+              - name: kubelet
+                protocol: TCP
+                port: 10250
+              - name: node-exporter
+                protocol: TCP
+                port: 9100
+          - to:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: kube-system
+                podSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: kube-state-metrics
+            ports:
+              - protocol: TCP
+                port: 8080
+              - protocol: TCP
+                port: 8081
+          - to:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: kube-system
+                podSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: kube-state-metrics
+            ports:
+              - protocol: TCP
+                port: 8080
+          - to:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: kube-system
+                podSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: traefik
+            ports:
+              - protocol: TCP
+                port: 9100
+          - to:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: kube-storage
+                podSelector:
+                  matchLabels:
+                    app: local-volume-provisioner
+            ports:
+              - protocol: TCP
+                port: 8080
+          - to:
+              - podSelector:
+                  matchLabels:
+                    app: node-exporter
+            ports:
+              - protocol: TCP
+                port: 9100
+          - to:
+              - podSelector:
+                  matchLabels:
+                    app: graphite-exporter
+            ports:
+              - protocol: TCP
+                port: 9108
+          - to:
+              - podSelector:
+                  matchLabels:
+                    prometheus: monitoring
+            ports:
+              - protocol: TCP
+                port: 3000
+          - to:
+              - podSelector:
+                  matchLabels:
+                    app: loki
+            ports:
+              - protocol: TCP
+                port: 3100
+          - to:
+              - podSelector:
+                  matchLabels:
+                    app: promtail
+            ports:
+              - protocol: TCP
+                port: 3101
+          - to:
+              - podSelector:
+                  matchLabels:
+                    app: syslog-forwarder
+                    comp: promtail
+            ports:
+              - protocol: TCP
+                port: 3101
+          - to:
+              - podSelector:
+                  matchLabels:
+                    app: grafana
+            ports:
+              - protocol: TCP
+                port: 3000
+          - to:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: apps
+                podSelector:
+                  matchLabels:
+                    app: prowlarr
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: apps
+                podSelector:
+                  matchLabels:
+                    app: radarr
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: apps
+                podSelector:
+                  matchLabels:
+                    app: sonarr
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: apps
+                podSelector:
+                  matchLabels:
+                    app: lidarr
+            ports:
+              - protocol: TCP
+                port: 9793
+          - to:
+              - ipBlock:
+                  cidr: "{{ server_ip }}/32"
+            ports:
+              - protocol: TCP
+                port: 9221
+              - protocol: TCP
+                port: 9100
+          - to:
+              - ipBlock:
+                  cidr: "{{ firewall_ip }}/32"
+            ports:
+              - protocol: TCP
+                port: 9273

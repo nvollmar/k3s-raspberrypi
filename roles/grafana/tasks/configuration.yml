@@ -1,0 +1,114 @@
+---
+
+- name: "Create grafana datasources config"
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: grafana-datasources
+        namespace: monitoring
+        labels:
+          app: grafana
+      data:
+        datasources.yaml: |-
+          apiVersion: 1
+          datasources:
+          - name: "Prometheus"
+            type: "prometheus"
+            uid: "prometheus"
+            editable: false
+            access: "proxy"
+            orgId: 1
+            isDefault: true
+            url: "http://prometheus.monitoring.svc:9090"
+            version: 1
+            jsonData:
+              alertmanagerUid: "alertmanager"
+              httpMethod: "POST"
+          
+          - name: "Loki"
+            type: "loki"
+            uid: "loki"
+            editable: false
+            access: "proxy"
+            orgId: 1
+            url: "http://loki-discovery.monitoring.svc:3100"
+            version: 1
+          
+          - name: "Alertmanager"
+            type: "alertmanager"
+            uid: "alertmanager"
+            editable: false
+            access: "proxy"
+            orgId: 1
+            url: "http://alertmanager-discovery.monitoring.svc:9093"
+            jsonData:
+              implementation: "prometheus"
+
+- name: "Grafana notifiers config"
+  k8s:
+    state: present
+    definition:
+      kind: ConfigMap
+      metadata:
+        name: grafana-notifiers
+        namespace: monitoring
+        labels:
+          app: grafana
+      data:
+        notifiers.yml: |-
+          apiVersion: 1
+          notifiers:
+          - name: alertmanager
+            type: prometheus-alertmanager
+            uid: notifier1
+            org_id: 1
+            is_default: false
+            send_reminder: false
+            frequency: 1h
+            settings:
+              url: http://alertmanager-discovery.monitoring.svc:9093
+              uploadImage: false
+
+- name: "Create grafana ini config"
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: grafana-config
+        namespace: monitoring
+        labels:
+          app: grafana
+      data:
+        grafana.ini: |
+          [server]
+            protocol = http
+            http_port = 3000
+            domain = k3s.example.local
+            root_url = %(protocol)s://%(domain)s:%(http_port)s/grafana/
+            serve_from_sub_path = true
+            read_timeout = 2m
+          [auth.anonymous]
+            enabled = true
+            org_role = Admin
+          [analytics]
+            reporting_enabled = false
+            check_for_updates = false
+          [log]
+            mode = console
+            level = info
+          [paths]
+            data         = /var/lib/grafana/data
+            logs         = /var/log/grafana
+            plugins      = /var/lib/grafana/plugins
+            provisioning = /etc/grafana/provisioning
+          [dataproxy]
+            logging: true
+            timeout: 600
+            keep_alive_seconds: 600
+            dialTimeout: 600
+            tls_handshake_timeout_seconds: 600

@@ -1,0 +1,7 @@
+---
+
+- import_tasks: graphite_exporter_truenas.yml
+
+- import_tasks: node_exporter_deployment.yml
+
+- import_tasks: node_exporter_network.yml

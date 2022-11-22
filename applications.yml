@@ -1,0 +1,52 @@
+---
+
+- hosts: localhost
+  vars:
+    ansible_connection: local
+  roles:
+    - k3s_facts
+  tags: always
+
+
+- hosts: localhost
+  tasks:
+    - name: "Create monitoring namespace"
+      k8s:
+        state: present
+        definition:
+          api_version: v1
+          kind: Namespace
+          metadata:
+            name: "apps"
+
+    - name: "Create default deny network policy"
+      k8s:
+        state: present
+        definition:
+          kind: NetworkPolicy
+          apiVersion: networking.k8s.io/v1
+          metadata:
+            name: "default-deny-all"
+            namespace: "apps"
+          spec:
+            podSelector: { }
+            policyTypes:
+              - Ingress
+              - Egress
+  tags: always
+
+
+- hosts: localhost
+  vars:
+    ansible_connection: local
+  roles:
+    - dashboard
+  tags: dashboard
+
+
+- hosts: localhost
+  vars:
+    ansible_connection: local
+  roles:
+    - servarr
+  tags: servarr

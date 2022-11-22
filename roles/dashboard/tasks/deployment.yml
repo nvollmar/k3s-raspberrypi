@@ -1,0 +1,75 @@
+---
+
+- name: "Create homer deployment"
+  k8s:
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: dashboard
+        namespace: apps
+        labels:
+          app: dashboard
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: dashboard
+        strategy:
+          type: RollingUpdate
+        template:
+          metadata:
+            labels:
+              app: dashboard
+          spec:
+            restartPolicy: Always
+            securityContext:
+              runAsNonRoot: true
+              runAsUser: 10000
+              fsGroup: 10000
+            containers:
+              - name: homer
+                image: "b4bz/homer:{{ homer_image_tag }}"
+                ports:
+                  - containerPort: 8080
+                    name: web
+                env:
+                  - name: SUBFOLDER
+                    value: "/dashboard"
+                  - name: TZ
+                    value: "UTC"
+                volumeMounts:
+                  - name: dashboard-config
+                    mountPath: /www/assets/config.yml
+                    subPath: config.yml
+                  - name: dashboard-config
+                    mountPath: /www/assets/custom.css
+                    subPath: custom.css
+            nodeSelector:
+              node-type: worker
+            volumes:
+              - name: dashboard-config
+                configMap:
+                  name: dashboard-config
+                  defaultMode: 420
+
+- name: "Create dashboard service"
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: dashboard
+        namespace: apps
+        labels:
+          app: dashboard
+      spec:
+        type: ClusterIP
+        selector:
+          app: dashboard
+        ports:
+          - name: web
+            port: 8080
+            targetPort: 8080

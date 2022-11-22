@@ -1,0 +1,14 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "grafana-dashboards-{{ (item.path | dirname) }}"
+  namespace: monitoring
+  labels:
+    app: grafana
+data:
+  {{ item.src | basename }} : |
+    {{
+      lookup('file', item.src) |
+      indent(width=4)
+    }}

@@ -1,0 +1,14 @@
+---
+
+- name: "Gather k3s namespaces"
+  command: "kubectl config view --minify --output 'jsonpath={..namespace}'"
+  register: k3s_namespace_result
+  changed_when: false
+
+- name: "Define constants"
+  set_fact:
+    k3s_cluster_name: "k3s"
+    k3s_cluster_domain: "k3s.local"
+    k3s_domain: "k3s.example.local"
+
+- include_vars: "versions.yml"

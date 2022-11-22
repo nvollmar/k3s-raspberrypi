@@ -1,0 +1,31 @@
+---
+
+- name: "Create grafana dashboard provider config"
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: grafana-dashboard-providers
+        namespace: monitoring
+        labels:
+          app: grafana
+      data:
+        default.yml: |-
+          apiVersion: 1
+          providers:
+            - name: Default
+              orgId: 1
+              folder: ''
+              type: file
+              options:
+                path: /var/lib/grafana/dashboards
+                foldersFromFilesStructure: true
+
+- name: "Create k3s cluster dashboard config"
+  k8s:
+    state: present
+    definition: "{{ lookup('template', 'grafana-dashboards.yml.j2', convert_data=False) | string }}"
+  when: item.state == 'file' and item.src.endswith('.json')
+  with_filetree: "dashboards/"

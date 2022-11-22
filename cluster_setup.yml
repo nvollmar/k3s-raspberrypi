@@ -1,0 +1,41 @@
+---
+
+- hosts: localhost
+  vars:
+    ansible_connection: local
+  roles:
+    - k3s_facts
+  tags: always
+
+- hosts: localhost
+  tasks:
+    - name: "Create storage namespace"
+      k8s:
+        state: present
+        definition:
+          api_version: v1
+          kind: Namespace
+          metadata:
+            name: kube-storage
+  tags: always
+
+- hosts: localhost
+  vars:
+    ansible_connection: local
+  roles:
+    - local_volume_provisioner
+  tags: storage
+
+- hosts: localhost
+  vars:
+    ansible_connection: local
+  roles:
+    - kube_state_metrics
+  tags: kube_state_metrics
+
+- hosts: localhost
+  vars:
+    ansible_connection: local
+  roles:
+    - traefik
+  tags: traefik

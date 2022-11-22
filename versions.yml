@@ -1,0 +1,20 @@
+---
+
+kube_state_metrics_image_tag: 2.6.0
+
+prometheus_image_tag: v2.40.1
+alertmanager_image_tag: v0.24.0
+node_exporter_image_tag: v1.4.0
+graphite_exporter_image_tag: v0.13.0
+
+loki_image_tag: 2.7.0
+promtail_image_tag: 2.7.0
+
+grafana_image_tag: 9.2.5
+homer_image_tag: v22.11.1
+
+radarr_image_tag: 4.2.4
+sonarr_image_tag: 3.0.9
+lidarr_image_tag: 1.0.2
+readarr_image_tag: 0.1.1-develop
+prowlarr_image_tag: 0.4.9-develop

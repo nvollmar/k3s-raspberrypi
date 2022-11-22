@@ -1,0 +1,78 @@
+---
+
+- name: "Create egress network policy for dns"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: alertmanager-dns-out
+        namespace: monitoring
+        labels:
+          app: alertmanager
+          context: dns
+      spec:
+        podSelector:
+          matchLabels:
+            alertmanager: monitoring
+        egress:
+          - to:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: kube-system
+            ports:
+              - protocol: TCP
+                port: 53
+              - protocol: UDP
+                port: 53
+
+- name: "Create ingress network policy for grafana"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: grafana-alertmanager-in
+        namespace: monitoring
+        labels:
+          app: grafana
+          context: alertmanager
+      spec:
+        podSelector:
+          matchLabels:
+            alertmanager: monitoring
+        ingress:
+          - from:
+              - podSelector:
+                  matchLabels:
+                    app: grafana
+            ports:
+              - protocol: TCP
+                port: 9093
+
+- name: "Create ingress network policy for prometheus"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: prometheus-alertmanager-in
+        namespace: monitoring
+        labels:
+          app: prometheus
+          context: alertmanager
+      spec:
+        podSelector:
+          matchLabels:
+            alertmanager: monitoring
+        ingress:
+          - from:
+              - podSelector:
+                  matchLabels:
+                    prometheus: monitoring
+            ports:
+              - protocol: TCP
+                port: 9093

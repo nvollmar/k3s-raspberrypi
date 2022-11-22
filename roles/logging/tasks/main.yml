@@ -1,0 +1,13 @@
+---
+
+- import_tasks: loki_deployment.yml
+
+- import_tasks: loki_network.yml
+
+- import_tasks: promtail_deployment.yml
+
+- import_tasks: promtail_network.yml
+
+- import_tasks: syslog_forwarder_promtail.yml
+
+- import_tasks: syslog_forwarder_rsyslog.yml

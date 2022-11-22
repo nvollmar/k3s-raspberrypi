@@ -1,0 +1,157 @@
+---
+
+- name: "Create egress network policy for dns"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: sonarr-dns-out
+        namespace: apps
+        labels:
+          app: sonarr
+          context: dns
+      spec:
+        podSelector:
+          matchLabels:
+            app: sonarr
+        egress:
+          - to:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: kube-system
+            ports:
+              - protocol: TCP
+                port: 53
+              - protocol: UDP
+                port: 53
+
+- name: "Create egress network policy for internet"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: sonarr-internet-out
+        namespace: apps
+        labels:
+          app: sonarr
+          context: internet
+      spec:
+        podSelector:
+          matchLabels:
+            app: sonarr
+        egress:
+          - to:
+              - ipBlock:
+                  cidr: 0.0.0.0/0
+                  except:
+                    - 10.0.0.0/8
+                    - 192.168.0.0/16
+                    - 172.16.0.0/20
+
+- name: "Create egress network policy for transmission"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: sonarr-transmission-out
+        namespace: apps
+        labels:
+          app: sonarr
+          context: transmission
+      spec:
+        podSelector:
+          matchLabels:
+            app: sonarr
+        egress:
+          - to:
+              - ipBlock:
+                  cidr: "{{ transmission_ip }}/32"
+            ports:
+              - name: api
+                port: 9091
+
+- name: "Create ingress network policy for scraping"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: sonarr-scrape-in
+        namespace: apps
+        labels:
+          app: prometheus
+          context: scraping
+      spec:
+        podSelector:
+          matchLabels:
+            app: sonarr
+        ingress:
+          - from:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: monitoring
+                podSelector:
+                  matchLabels:
+                    prometheus: monitoring
+            ports:
+              - protocol: TCP
+                port: 9793
+
+
+- name: "Create egress network policy to prowlarr"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: sonarr-prowlarr-out
+        namespace: apps
+        labels:
+          app: sonarr
+          context: prowlarr
+      spec:
+        podSelector:
+          matchLabels:
+            app: sonarr
+        egress:
+          - to:
+              - podSelector:
+                  matchLabels:
+                    app: prowlarr
+            ports:
+              - protocol: TCP
+                port: 9696
+
+
+- name: "Create ingress network policy for prowlarr"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: prowlarr-sonarr-in
+        namespace: apps
+        labels:
+          app: prowlarr
+          context: sonarr
+      spec:
+        podSelector:
+          matchLabels:
+            app: sonarr
+        ingress:
+          - from:
+              - podSelector:
+                  matchLabels:
+                    app: prowlarr
+            ports:
+              - protocol: TCP
+                port: 8989

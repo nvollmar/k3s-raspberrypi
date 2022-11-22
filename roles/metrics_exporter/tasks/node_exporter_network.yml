@@ -1,0 +1,26 @@
+---
+
+- name: "Create ingress network policy for scraping"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: node-exporter-scrape-in
+        namespace: monitoring
+        labels:
+          app: prometheus
+          context: scraping
+      spec:
+        podSelector:
+          matchLabels:
+            app: node-exporter
+        ingress:
+          - from:
+              - podSelector:
+                  matchLabels:
+                    prometheus: monitoring
+            ports:
+              - protocol: TCP
+                port: 9100

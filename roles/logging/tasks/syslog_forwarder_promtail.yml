@@ -1,0 +1,321 @@
+---
+
+- name: "Create promtail syslog forwarder configuration"
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: syslog-forwarder-promtail-config
+        namespace: monitoring
+        labels:
+          app: syslog-forwarder
+          comp: promtail
+      data:
+        promtail.yaml: |-
+          server:
+            log_level: info
+            http_listen_port: 3101
+            grpc_listen_port: 0
+          
+          clients:
+            - url: http://loki-discovery.monitoring.svc:3100/loki/api/v1/push
+          
+          positions:
+            filename: /run/promtail/positions.yaml
+          
+          scrape_configs:
+            - job_name: pfsense
+              syslog:
+                listen_address: 0.0.0.0:3510
+                listen_protocol: tcp
+                idle_timeout: 60s
+                label_structured_data: yes
+                labels:
+                  job: "syslog"
+                  key: "pfsense"
+              relabel_configs:
+                - source_labels: [__syslog_message_hostname]
+                  target_label: host
+                - source_labels: [__syslog_message_severity]
+                  target_label: level
+                - source_labels: [__syslog_message_app_name]
+                  target_label: application
+                - source_labels: [__syslog_message_facility]
+                  target_label: facility
+                - source_labels: [__syslog_connection_hostname]
+                  target_label: connection_hostname
+              pipeline_stages:
+              - match:
+                  selector: '{application="filterlog"}'
+                  stages:
+                    # see https://rubular.com/r/zFrPaLPnQXLUJC
+                    - regex:
+                        expression: '\d+,,,\d+,(?P<if>\w+),\w+,(?P<action>\w+),(?P<direction>\w+),6,\w+,\w+,\w+,(?P<proto>\w+),\d+,\d+,(?P<src>[a-zA-Z\d:]+),(?P<dest>[a-zA-Z\d:]+)(,(?P<sport>\d+),(?P<dport>\d+))?,.*'
+                    - regex:
+                        expression: '\d+,,,\d+,(?P<if>[\w\.]+),\w+,(?P<action>\w+),(?P<direction>\w+),4,\w+,,\d+,\d+,\d+,\w+,\d+,(?P<proto>\w+),\d+,(?P<src>[\d\.]+),(?P<dest>[\d\.]+)(,(?P<sport>\d+),(?P<dport>\d+))?,.*'
+                    - labels:
+                        if:
+                        action:
+                        proto:
+                        src:
+                        dest:
+                        sport:
+                        dport:
+
+            - job_name: server
+              syslog:
+                listen_address: 0.0.0.0:3511
+                listen_protocol: tcp
+                idle_timeout: 60s
+                label_structured_data: yes
+                labels:
+                  job: "syslog"
+                  key: "server"
+              relabel_configs:
+                - source_labels: [__syslog_message_hostname]
+                  target_label: host
+                - source_labels: [__syslog_message_severity]
+                  target_label: level
+                - source_labels: [__syslog_message_app_name]
+                  target_label: application
+                - source_labels: [__syslog_message_facility]
+                  target_label: facility
+                - source_labels: [__syslog_connection_hostname]
+                  target_label: connection_hostname
+                      
+                      
+
+- name: "Create syslog forwarder promtail deployment"
+  k8s:
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: syslog-forwarder-promtail
+        namespace: monitoring
+        labels:
+          app: syslog-forwarder
+          comp: promtail
+      spec:
+        replicase: 1
+        updateStrategy:
+          rollingUpdate:
+            maxSurge: 0
+            maxUnavailable: 1
+          type: RollingUpdate
+        selector:
+          matchLabels:
+            app: syslog-forwarder
+            comp: promtail
+        template:
+          metadata:
+            labels:
+              app: syslog-forwarder
+              comp: promtail
+            annotations:
+              prometheus.io/port: "3101"
+              prometheus.io/scrape: "true"
+          spec:
+            restartPolicy: Always
+            schedulerName: default-scheduler
+            securityContext:
+              runAsGroup: 0
+              runAsUser: 0
+            terminationGracePeriodSeconds: 30
+            containers:
+              - name: promtail
+                image: "docker.io/grafana/promtail:{{ promtail_image_tag }}"
+                imagePullPolicy: IfNotPresent
+                args: [ '-config.file=/etc/promtail/promtail.yaml' ]
+                securityContext:
+                  allowPrivilegeEscalation: false
+                  capabilities:
+                    drop:
+                      - ALL
+                  readOnlyRootFilesystem: true
+                env:
+                  - name: HOSTNAME
+                    valueFrom:
+                      fieldRef:
+                        apiVersion: v1
+                        fieldPath: spec.nodeName
+                ports:
+                  - containerPort: 3510
+                    name: syslog-pfsense
+                    protocol: TCP
+                  - containerPort: 3511
+                    name: syslog-server
+                    protocol: TCP
+                  - containerPort: 3101
+                    name: http-metrics
+                    protocol: TCP
+                readinessProbe:
+                  failureThreshold: 5
+                  httpGet:
+                    path: /ready
+                    port: http-metrics
+                    scheme: HTTP
+                  initialDelaySeconds: 10
+                  periodSeconds: 10
+                  successThreshold: 1
+                  timeoutSeconds: 1
+                terminationMessagePath: /dev/termination-log
+                terminationMessagePolicy: File
+                volumeMounts:
+                  - mountPath: /etc/promtail
+                    name: promtail-config
+                    readOnly: true
+                  - mountPath: /run/promtail
+                    name: run
+            volumes:
+              - name: promtail-config
+                configMap:
+                  name: syslog-forwarder-promtail-config
+                  defaultMode: 420
+                  readOnly: true
+              - name: run
+                hostPath:
+                  path: /run/promtail
+                  type: ""
+
+- name: "Create promtail syslog forwarder service"
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: syslog-forwarder-promtail
+        namespace: monitoring
+        labels:
+          app: syslog-forwarder
+          comp: promtail
+      spec:
+        type: ClusterIP
+        selector:
+          app: syslog-forwarder
+          comp: promtail
+        ports:
+          - port: 3510
+            name: syslog-pfsense
+            protocol: TCP
+            targetPort: 3510
+          - port: 3511
+            name: syslog-server
+            protocol: TCP
+            targetPort: 3511
+
+- name: "Create egress network policy for dns"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: syslog-forwarder-promtail-dns-out
+        namespace: monitoring
+        labels:
+          app: syslog-forwarder
+          comp: promtail
+          context: dns
+      spec:
+        podSelector:
+          matchLabels:
+            app: syslog-forwarder
+            comp: promtail
+        egress:
+          - to:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: kube-system
+            ports:
+              - protocol: TCP
+                port: 53
+              - protocol: UDP
+                port: 53
+
+- name: "Create ingress network policy for scraping"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: syslog-forwarder-promtail-scrape-in
+        namespace: monitoring
+        labels:
+          app: prometheus
+          context: scraping
+      spec:
+        podSelector:
+          matchLabels:
+            app: syslog-forwarder
+            comp: promtail
+        ingress:
+          - from:
+              - podSelector:
+                  matchLabels:
+                    prometheus: monitoring
+            ports:
+              - protocol: TCP
+                port: 3101
+
+- name: "Create ingress network policy for promtail syslog forwarder"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: syslog-forwarder-rsyslog-promtail-in
+        namespace: monitoring
+        labels:
+          app: syslog-forwarder
+          comp: rsyslog
+          context: promtail
+      spec:
+        podSelector:
+          matchLabels:
+            app: syslog-forwarder
+            comp: promtail
+        ingress:
+          - from:
+              - podSelector:
+                  matchLabels:
+                    app: syslog-forwarder
+                    comp: rsyslog
+            ports:
+              - port: 3510
+                protocol: TCP
+              - port: 3511
+                protocol: TCP
+
+- name: "Create egress network policy for loki"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: syslog-forwarder-promtail-loki-out
+        namespace: monitoring
+        labels:
+          app: syslog-forwarder
+          comp: promtail
+          context: loki
+      spec:
+        podSelector:
+          matchLabels:
+            app: syslog-forwarder
+            comp: promtail
+        egress:
+          - to:
+              - podSelector:
+                  matchLabels:
+                    app: loki
+            ports:
+              - protocol: TCP
+                port: 3100

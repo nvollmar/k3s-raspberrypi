@@ -1,0 +1,8 @@
+---
+
+k3s_master_ip: "{{ groups['master'][0] }}"
+k3s_network: "{{ (groups['master'] + groups['node']) | cidr_merge('span')  }}"
+
+firewall_ip:  # set proper ip
+server_ip: # set proper ip
+transmission_ip: # set proper ip

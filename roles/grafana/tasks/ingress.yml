@@ -1,0 +1,82 @@
+---
+
+
+- name: "Create grafana ingress"
+  k8s:
+    state: present
+    definition:
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      metadata:
+        name: grafana
+        namespace: monitoring
+        labels:
+          app: grafana
+          context: ingress
+        annotations:
+          kubernetes.io/ingress.class: traefik
+          traefik.ingress.kubernetes.io/router.entrypoints: websecure
+          traefik.ingress.kubernetes.io/router.tls: "true"
+          traefik.ingress.kubernetes.io/router.middlewares: monitoring-grafana-stripprefix@kubernetescrd
+      spec:
+        tls:
+          - hosts: [ "{{ k3s_domain }}" ]
+            secretName: traefik-ingress-tls
+        rules:
+          - host: "{{ k3s_domain }}"
+            http:
+              paths:
+                - path: /grafana
+                  pathType: Prefix
+                  backend:
+                    service:
+                      name: grafana
+                      port:
+                        name: http
+
+- name: "Create grafana ingress middleware"
+  k8s:
+    state: present
+    definition:
+      apiVersion: traefik.containo.us/v1alpha1
+      kind: Middleware
+      metadata:
+        name: grafana-stripprefix
+        namespace: monitoring
+        labels:
+          app: grafana
+          context: ingress
+      spec:
+        stripPrefix:
+          prefixes:
+            - /grafana
+
+- name: "Create grafana ingress network policy"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: grafana-ingress-in
+        namespace: monitoring
+        labels:
+          app: grafana
+          context: ingress
+      spec:
+        podSelector:
+          matchLabels:
+            app: grafana
+        policyTypes:
+          - Ingress
+        ingress:
+          - from:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: kube-system
+              podSelector:
+                matchLabels:
+                  app.kubernetes.io/name: traefik
+            ports:
+              - protocol: TCP
+                port: 3000

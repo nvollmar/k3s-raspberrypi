@@ -1,0 +1,11 @@
+---
+#required
+#local_volume_size: "2G"
+
+local_volume_pool: "data"
+
+local_volume_root: "/var/srv/{{ local_volume_pool }}"
+
+local_volume_storage_class_mount_dir: "/var/mnt/data"
+
+local_volume_condition_dir: "{{ local_volume_root }}"

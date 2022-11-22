@@ -1,0 +1,227 @@
+---
+
+- name: "Create dashboard config"
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: dashboard-config
+        namespace: apps
+        labels:
+          app: dashboard
+      data:
+        custom.css: |-
+          @charset "UTF-8";
+          @import url("https://fonts.googleapis.com/css2?family=Open+Sans:wght@300;400;600;700&display=swap");
+
+          body .no-footer #main-section {
+            display: flex;
+            flex-grow: 1;
+          }
+          body #app {
+            display: flex;
+            flex-direction: column;
+          }
+
+          footer {
+            display: none;
+          }
+          body,
+          h1,
+          h2,
+          p,
+          .title {
+            font-family: Open Sans !important;
+            font-weight: 400 !important;
+            margin-top: 0;
+          }
+
+          p.title {
+            font-weight: 700 !important;
+          }
+
+          nav {
+            /* display: none !important; */
+          }
+  
+          body h2 {
+            margin-top: 0em;
+            margin-bottom: 0em;
+          }
+  
+          body #bighead .first-line .logo img {
+            border-radius: 50%;
+          }
+          body #app .card,
+          body #app .card:hover,
+          body #app .message {
+            /*box-shadow: unset;*/
+          }
+          body .card {
+            box-shadow: unset;
+            border-radius: 10px;
+          }
+          body #app .card {
+            border-radius: 10px;
+          }
+          .status :not(::before) {
+            display: none;
+          }
+          .image.is-48x48 {
+            width: 36px;
+            height: 36px;
+          }
+          .status.online,
+          .status.offline {
+            position: absolute;
+            right: 12px;
+            font-size: 0 !important;
+            color: var(--background) !important;
+          }
+          .column > div {
+            padding: 0.5em;
+          }
+
+          .status.offline::before {
+            background-color: var(--status-offline) !important;
+            border: unset !important;
+            box-shadow: 0 0 5px 1px var(--status-offline) !important;
+          }
+
+          .status.online::before {
+            background-color: var(--status-online) !important;
+            border: unset !important;
+            box-shadow: 0 0 5px 1px var(--status-online) !important;
+          }
+
+        config.yml: |-
+          title: "Dashboard"
+          logo: "logo.png"
+          # icon: "fas fa-skull-crossbones" # Optional icon
+          
+          header: false
+          footer: false
+          
+          # Optional theme customization
+          theme: default
+          
+          stylesheet:
+            - "assets/custom.css"
+          
+          colors:
+            light:
+              highlight-primary: "#323946"
+              highlight-secondary: "#323946"
+              highlight-hover: "#323946"
+              background: "#2E3440"
+              card-background: "#323946"
+              text: "#81A1C1"
+              text-header: "#81A1C1"
+              text-title: "#D8DEE9"
+              text-subtitle: "#ECEFF4"
+              status-offline: "#BF616A"
+              status-online: "#A3BE8C"
+            
+            dark:
+              highlight-primary: "#323946"
+              highlight-secondary: "#323946"
+              highlight-hover: "#323946"
+              background: "#2E3440"
+              card-background: "#323946"
+              text: "#81A1C1"
+              text-header: "#81A1C1"
+              text-title: "#D8DEE9"
+              text-subtitle: "#ECEFF4"
+              status-offline: "#BF616A"
+              status-online: "#A3BE8C"
+          
+          # Optional message
+          # message:
+          #   #url: https://b4bz.io
+          #   style: "is-dark" # See https://bulma.io/documentation/components/message/#colors for styling options.
+          #   title: "Demo !"
+          #   icon: "fa fa-grin"
+          #   content: "This is a dummy homepage demo. <br /> Find more information on <a href='https://github.com/bastienwirtz/homer'>github.com/bastienwirtz/homer</a>"
+          
+          # Optional navbar
+          links: [] # Allows for navbar (dark mode, layout, and search) without any links
+          # links:
+          #- name: "Contribute"
+          #  icon: "fab fa-github"
+          #  url: "https://github.com/bastienwirtz/homer"
+          #  target: "_blank" # optional html a tag target attribute
+
+          
+          # Services
+          # First level array represent a group.
+          # Leave only a "items" key if not using group (group name, icon & tagstyle are optional, section separation will not be displayed).
+          services:
+            - name: "Apps"
+              icon: "fas fa-photo-video"
+              items:
+                - name: "Radarr"
+                  subtitle: "Movie collector"
+                  url: "https://k3s.example.local/radarr/"
+                  target: "_blank"
+                  logo: "https://raw.githubusercontent.com/nvollmar/dashboard-icons/main/png/radarr.png"
+                  tag: "k3s"
+                - name: "Sonarr"
+                  subtitle: "TV show collector"
+                  url: "https://k3s.example.local/sonarr/"
+                  target: "_blank"
+                  logo: "https://raw.githubusercontent.com/nvollmar/dashboard-icons/main/png/sonarr.png"
+                  tag: "k3s"
+                - name: "Lidarr"
+                  subtitle: "Music collector"
+                  url: "https://k3s.example.local/lidarr/"
+                  target: "_blank"
+                  logo: "https://raw.githubusercontent.com/nvollmar/dashboard-icons/main/png/lidarr.png"
+                  tag: "k3s"
+                - name: "Readarr"
+                  subtitle: "E-Book collector"
+                  url: "https://k3s.example.local/readarr/"
+                  target: "_blank"
+                  logo: "https://raw.githubusercontent.com/nvollmar/dashboard-icons/main/png/readarr.png"
+                  tag: "k3s"
+                - name: "Prowlarr"
+                  subtitle: "Media indexer"
+                  url: "https://k3s.example.local/prowlarr/"
+                  target: "_blank"
+                  logo: "https://raw.githubusercontent.com/nvollmar/dashboard-icons/main/png/prowlarr.png"
+                  tag: "k3s"
+            - name: "Storage"
+              icon: "fas fa-hdd"
+              items:
+                - name: "NAS"
+                  subtitle: "TrueNAS Core"
+                  url: "http://nas.example.local"
+                  target: "_blank"
+                  logo: "https://raw.githubusercontent.com/nvollmar/dashboard-icons/main/png/truenascore.png"
+                - name: "Transmission"
+                  subtitle: "Torrent client"
+                  url: "http://transmission.example.local:9091"
+                  target: "_blank"
+                  logo: "https://raw.githubusercontent.com/nvollmar/dashboard-icons/main/png/synology-download-station.png"
+            - name: "Monitoring"
+              icon: "fa-solid fa-chart-line"
+              items:
+                - name: "Grafana"
+                  subtitle: "Monitoring"
+                  url: "https://k3s.example.local/grafana/dashboards?layout=folders"
+                  target: "_blank"
+                  logo: "https://raw.githubusercontent.com/nvollmar/dashboard-icons/main/svg/grafana.svg"
+                  tag: "k3s"
+                - name: "Prometheus"
+                  subtitle: "Monitoring data server"
+                  url: "https://k3s.example.local/prometheus/"
+                  target: "_blank"
+                  logo: "https://raw.githubusercontent.com/nvollmar/dashboard-icons/main/svg/prometheus.svg"
+                  tag: "k3s"
+                - name: "AlertManager"
+                  subtitle: "Alerting"
+                  url: "https://k3s.example.local/alertmanager/"
+                  target: "_blank"
+                  logo: "https://raw.githubusercontent.com/nvollmar/dashboard-icons/main/svg/prometheus.svg"
+                  tag: "k3s"

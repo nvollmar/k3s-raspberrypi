@@ -1,0 +1,194 @@
+---
+
+- name: "Create rsyslog forwarder configuration"
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: syslog-forwarder-rsyslog-config
+        namespace: monitoring
+        labels:
+          app: syslog-forwarder
+          comp: rsyslog
+      data:
+        relay.conf: |
+          # https://www.rsyslog.com/doc/v8-stable/configuration/modules/omfwd.html
+          # https://grafana.com/docs/loki/latest/clients/promtail/scraping/#rsyslog-output-configuration
+          ruleset(name="pfsense"){
+            action(type="omfwd" target="syslog-forwarder-promtail.monitoring.svc" port="3510" protocol="tcp" template="RSYSLOG_SyslogProtocol23Format" TCP_Framing="octet-counted")
+          }
+          ruleset(name="server"){
+            action(type="omfwd" target="syslog-forwarder-promtail.monitoring.svc" port="3511" protocol="tcp" template="RSYSLOG_SyslogProtocol23Format" TCP_Framing="octet-counted")
+          }
+        imudp.conf: |
+          module(load="imudp")
+          input(type="imudp" port="3510" ruleset="pfsense")
+          input(type="imudp" port="3511" ruleset="server")
+
+- name: "Create rsyslog forwarder deployment"
+  k8s:
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: syslog-forwarder-rsyslog
+        namespace: monitoring
+        labels:
+          app: syslog-forwarder
+          comp: rsyslog
+      spec:
+        replicase: 1
+        updateStrategy:
+          rollingUpdate:
+            maxSurge: 0
+            maxUnavailable: 1
+          type: RollingUpdate
+        selector:
+          matchLabels:
+            app: syslog-forwarder
+            comp: rsyslog
+        template:
+          metadata:
+            labels:
+              app: syslog-forwarder
+              comp: rsyslog
+          spec:
+            restartPolicy: Always
+            schedulerName: default-scheduler
+            securityContext:
+              runAsGroup: 0
+              runAsUser: 0
+            terminationGracePeriodSeconds: 30
+            containers:
+              - name: rsyslog
+                image: jumanjiman/rsyslog:latest
+                ports:
+                  - containerPort: 3510
+                    name: syslog-pfsense
+                    protocol: UDP
+                  - containerPort: 3511
+                    name: syslog-server
+                    protocol: UDP
+                volumeMounts:
+                  - name: config-volume
+                    mountPath: /etc/rsyslog.d
+            volumes:
+              - name: config-volume
+                configMap:
+                  name: syslog-forwarder-rsyslog-config
+
+- name: "Create rsyslog forwarder service"
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: syslog-forwarder-rsyslog
+        namespace: monitoring
+        labels:
+          app: syslog-forwarder
+          comp: rsyslog
+      spec:
+        type: NodePort
+        selector:
+          app: syslog-forwarder
+          comp: rsyslog
+        ports:
+          - name: syslog-pfsense
+            port: 3510
+            nodePort: 30510
+            protocol: UDP
+            targetPort: 3510
+          - name: syslog-server
+            port: 3511
+            nodePort: 30511
+            protocol: UDP
+            targetPort: 3511
+
+- name: "Create egress network policy for dns"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: syslog-forwarder-rsyslog-dns-out
+        namespace: monitoring
+        labels:
+          app: syslog-forwarder
+          comp: rsyslog
+          context: dns
+      spec:
+        podSelector:
+          matchLabels:
+            app: syslog-forwarder
+            comp: rsyslog
+        egress:
+          - to:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: kube-system
+            ports:
+              - protocol: TCP
+                port: 53
+              - protocol: UDP
+                port: 53
+
+- name: "Create rsyslog forwarder ingress network policy"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: syslog-forwarder-rsyslog-ingress-in
+        namespace: monitoring
+        labels:
+          app: syslog-forwarder
+          comp: rsyslog
+          context: ingress
+      spec:
+        podSelector:
+          matchLabels:
+            app: syslog-forwarder
+            comp: rsyslog
+        ingress:
+          - ports:
+              - port: 3510
+                protocol: UDP
+              - port: 3511
+                protocol: UDP
+
+- name: "Create egress network policy for promtail syslog forwarder"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: syslog-forwarder-rsyslog-promtail-out
+        namespace: monitoring
+        labels:
+          app: syslog-forwarder
+          comp: rsyslog
+          context: promtail
+      spec:
+        podSelector:
+          matchLabels:
+            app: syslog-forwarder
+            comp: rsyslog
+        egress:
+          - to:
+              - podSelector:
+                  matchLabels:
+                    app: syslog-forwarder
+                    comp: promtail
+            ports:
+              - port: 3510
+                protocol: TCP
+              - port: 3511
+                protocol: TCP

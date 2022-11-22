@@ -1,0 +1,130 @@
+---
+
+- name: "Create egress network policy for dns"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: grafana-dns-out
+        namespace: monitoring
+        labels:
+          app: grafana
+          context: dns
+      spec:
+        podSelector:
+          matchLabels:
+            app: grafana
+        egress:
+          - to:
+              - namespaceSelector:
+                  matchLabels:
+                    kubernetes.io/metadata.name: kube-system
+            ports:
+              - protocol: TCP
+                port: 53
+              - protocol: UDP
+                port: 53
+
+- name: "Create ingress network policy for scraping"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: grafana-scrape-in
+        namespace: monitoring
+        labels:
+          app: prometheus
+          context: scraping
+      spec:
+        podSelector:
+          matchLabels:
+            app: grafana
+        ingress:
+          - from:
+              - podSelector:
+                  matchLabels:
+                    prometheus: monitoring
+            ports:
+              - protocol: TCP
+                port: 3000
+
+- name: "Create egress network policy for prometheus"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: grafana-prometheus-out
+        namespace: monitoring
+        labels:
+          app: grafana
+          context: prometheus
+      spec:
+        podSelector:
+          matchLabels:
+            app: grafana
+        egress:
+          - to:
+              - podSelector:
+                  matchLabels:
+                    prometheus: monitoring
+            ports:
+              - protocol: TCP
+                port: 9090
+
+- name: "Create egress network policy for alertmanager"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: grafana-alertmanager-out
+        namespace: monitoring
+        labels:
+          app: grafana
+          context: alertmanager
+      spec:
+        podSelector:
+          matchLabels:
+            app: grafana
+        egress:
+          - to:
+              - podSelector:
+                  matchLabels:
+                    alertmanager: monitoring
+            ports:
+              - protocol: TCP
+                port: 9093
+
+- name: "Create egress network policy for loki"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: grafana-loki-out
+        namespace: monitoring
+        labels:
+          app: grafana
+          context: loki
+      spec:
+        podSelector:
+          matchLabels:
+            app: grafana
+        egress:
+          - to:
+              - podSelector:
+                  matchLabels:
+                    app: loki
+            ports:
+              - protocol: TCP
+                port: 3100
+              - protocol: TCP
+                port: 9095

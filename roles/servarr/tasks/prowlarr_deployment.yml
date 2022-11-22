@@ -1,0 +1,200 @@
+---
+
+- name: "Create prowlarr config"
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: prowlarr-config
+        namespace: apps
+        labels:
+          app: prowlarr
+      data:
+        config.xml: |-
+          <Config>
+            <LogLevel>info</LogLevel>
+            <UrlBase>/prowlarr</UrlBase>
+            <UpdateMechanism>Docker</UpdateMechanism>
+            <BindAddress>*</BindAddress>
+            <Port>9696</Port>
+            <SslPort>6969</SslPort>
+            <EnableSsl>False</EnableSsl>
+            <LaunchBrowser>True</LaunchBrowser>
+            <ApiKey>f09777c1b30242a69c15a2d428e2519c</ApiKey>
+            <AuthenticationMethod>None</AuthenticationMethod>
+            <Branch>develop</Branch>
+            <SslCertPath></SslCertPath>
+            <SslCertPassword></SslCertPassword>
+            <InstanceName>Prowlarr</InstanceName>
+          </Config>
+
+- name: "Create prowlarr deployment"
+  k8s:
+    state: present
+    definition:
+      apiVersion: apps/v1
+      kind: StatefulSet
+      metadata:
+        name: prowlarr
+        namespace: apps
+        labels:
+          app: prowlarr
+      spec:
+        replicas: 1
+        podManagementPolicy: OrderedReady
+        strategy:
+          type: Recreate
+        selector:
+          matchLabels:
+            app: prowlarr
+        template:
+          metadata:
+            labels:
+              app: prowlarr
+            annotations:
+#              prometheus.io/port: "9793"
+#              prometheus.io/scrape: "true"
+          spec:
+            restartPolicy: Always
+            serviceAccountName: default
+            automountServiceAccountToken: true
+            dnsPolicy: ClusterFirst
+            enableServiceLinks: true
+            initContainers:
+              - name: init-config
+                image: alpine:3.6
+                securityContext:
+                  runAsUser: 0
+                  privileged: true
+                command: ["/bin/sh", "-c"]
+                args:
+                  - >
+                    if [ ! -f /config/config.xml ]; then
+                      echo "copy initial configuration"
+                      cp /config.xml /config/
+                    else
+                      echo "volume already initialized"
+                    fi
+                volumeMounts:
+                  - name: prowlarr-storage
+                    mountPath: /config
+                  - name: prowlarr-config
+                    mountPath: /config.xml
+                    subPath: config.xml
+            containers:
+              - name: prowlarr
+                image: "linuxserver/prowlarr:{{ prowlarr_image_tag }}"
+                imagePullPolicy: IfNotPresent
+                env:
+                  - name: TZ
+                    value: "Europe/Zurich"
+                  - name: PUID
+                    value: "985"
+                  - name: PGID
+                    value: "999" # media group
+                ports:
+                  - name: http
+                    containerPort: 9696
+                    protocol: TCP
+                  - name: metrics
+                    containerPort: 9793
+                    protocol: TCP
+                resources:
+                  limits:
+                    cpu: 400m
+                    memory: 400Mi
+                  requests:
+                    cpu: 100m
+                    memory: 200Mi
+                livenessProbe:
+                  exec:
+                    command:
+                      - /usr/bin/env
+                      - bash
+                      - -c
+                      - curl --fail localhost:9696/prowlarr/api/v1/system/status?apiKey=`IFS=\> && while read -d
+                        \< E C; do if [[ $E = "ApiKey" ]]; then echo $C; fi; done < /config/config.xml`
+                  failureThreshold: 5
+                  initialDelaySeconds: 60
+                  periodSeconds: 10
+                  successThreshold: 1
+                  timeoutSeconds: 10
+                readinessProbe:
+                  tcpSocket:
+                    port: 9696
+                  initialDelaySeconds: 60
+                  failureThreshold: 5
+                  timeoutSeconds: 2
+                  periodSeconds: 10
+                volumeMounts:
+                  - name: prowlarr-storage
+                    mountPath: /config
+#              - name: exporter
+#                image: ghcr.io/onedr0p/exportarr:v1.1.0
+#                imagePullPolicy: IfNotPresent
+#                args:
+#                  - prowlarr
+#                env:
+#                  - name: URL
+#                    value: http://localhost:9696/prowlarr
+#                  - name: APIKEY
+#                    value: "f09777c1b30242a69c15a2d428e2519c"
+#                  - name: PORT
+#                    value: "9793"
+#                  - name: ENABLE_ADDITIONAL_METRICS
+#                    value: "false"
+#                  - name: ENABLE_UNKNOWN_QUEUE_ITEMS
+#                    value: "false"
+#                  - name: LOG_LEVEL
+#                    value: "WARN"
+#                ports:
+#                  - containerPort: 9793
+#                    name: metrics
+#                readinessProbe:
+#                  tcpSocket:
+#                    port: 9793
+#                  initialDelaySeconds: 60
+#                  failureThreshold: 5
+#                  timeoutSeconds: 2
+#                  periodSeconds: 10
+            volumes:
+              - name: prowlarr-config
+                configMap:
+                  name: prowlarr-config
+                  defaultMode: 0777
+        volumeClaimTemplates:
+          - apiVersion: v1
+            kind: PersistentVolumeClaim
+            metadata:
+              name: prowlarr-storage
+            spec:
+              accessModes:
+                - ReadWriteOnce
+              resources:
+                requests:
+                  storage: 1.5G
+              storageClassName: local-storage
+              volumeMode: Filesystem
+
+- name: "Create prowlarr service"
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: prowlarr
+        namespace: apps
+        labels:
+          app: prowlarr
+      spec:
+        type: ClusterIP
+        selector:
+          app: prowlarr
+        ports:
+          - name: http
+            port: 9696
+            targetPort: http
+            protocol: TCP

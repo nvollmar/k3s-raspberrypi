@@ -1,0 +1,7 @@
+---
+
+- import_tasks: configuration.yml
+
+- import_tasks: deployment.yml
+
+- import_tasks: ingress.yml

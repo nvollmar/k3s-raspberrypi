@@ -1,0 +1,62 @@
+---
+
+- name: "Create readarr ingress"
+  k8s:
+    state: present
+    definition:
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      metadata:
+        name: readarr
+        namespace: apps
+        labels:
+          app: readarr
+          context: ingress
+        annotations:
+          kubernetes.io/ingress.class: traefik
+          traefik.ingress.kubernetes.io/router.entrypoints: websecure
+          traefik.ingress.kubernetes.io/router.tls: "true"
+      spec:
+        tls:
+          - hosts: [ "{{ k3s_domain }}" ]
+            secretName: traefik-ingress-tls
+        rules:
+          - host: "{{ k3s_domain }}"
+            http:
+              paths:
+                - path: /readarr
+                  pathType: Prefix
+                  backend:
+                    service:
+                      name: readarr
+                      port:
+                        name: http
+
+
+- name: "Create readarr ingress network policy"
+  k8s:
+    state: present
+    definition:
+      kind: NetworkPolicy
+      apiVersion: networking.k8s.io/v1
+      metadata:
+        name: readarr-ingress-in
+        namespace: apps
+        labels:
+          app: readarr
+          context: ingress
+      spec:
+        podSelector:
+          matchLabels:
+            app: readarr
+        ingress:
+          - from:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: kube-system
+              podSelector:
+                matchLabels:
+                  app.kubernetes.io/name: traefik
+            ports:
+              - protocol: TCP
+                port: 8787

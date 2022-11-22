@@ -1,0 +1,16 @@
+---
+# adapted from: https://github.com/kubernetes-sigs/sig-storage-local-static-provisioner/blob/master/deployment/kubernetes/example/default_example_provisioner_generated.yaml
+
+
+- name: "Create storage class"
+  k8s:
+    state: present
+    definition:
+      apiVersion: storage.k8s.io/v1
+      kind: StorageClass
+      metadata:
+        name: local-storage
+      provisioner: kubernetes.io/no-provisioner
+      volumeBindingMode: WaitForFirstConsumer
+      # Supported policies: Delete, Retain
+      reclaimPolicy: Delete

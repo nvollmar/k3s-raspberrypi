@@ -1,0 +1,7 @@
+---
+
+- name: reload prometheus
+  command: kubectl -n monitoring exec {{ item }} -- /bin/kill -1 1
+  with_items:
+    - prometheus-0
+    - prometheus-1

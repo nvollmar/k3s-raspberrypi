@@ -1,0 +1,139 @@
+---
+
+- name: "Create prometheus service account"
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: prometheus
+        namespace: monitoring
+
+- name: "Create prometheus cluster role binding"
+  k8s:
+    state: present
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: prometheus
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: prometheus
+      subjects:
+        - kind: ServiceAccount
+          name: prometheus
+          namespace: monitoring
+
+- name: "Create prometheus cluster role"
+  k8s:
+    state: present
+    definition:
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRole
+      metadata:
+        name: prometheus
+        namespace: monitoring
+      rules:
+        - apiGroups: [ "" ]
+          resources:
+            - nodes
+            - services
+            - endpoints
+            - pods
+            - nodes/metrics
+            - nodes/proxy
+          verbs: [ "get", "list", "watch" ]
+        - apiGroups: [ "" ]
+          resources:
+            - configmaps
+          verbs: [ "get" ]
+        - nonResourceURLs: [ "/metrics" ]
+          verbs: [ "get" ]
+
+
+- name: "Create prometheus scrape config"
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: prometheus-scrape-config
+        namespace: monitoring
+        labels:
+          app: prometheus
+      data:
+        prometheus-additional.yml: "{{ lookup('template', 'prometheus-scrape-config.yml.j2' ) | b64encode }}"
+
+
+- name: "Create prometheus deployment"
+  k8s:
+    state: present
+    definition:
+      apiVersion: monitoring.coreos.com/v1
+      kind: Prometheus
+      metadata:
+        name: monitoring
+        namespace: monitoring
+        labels:
+          app: prometheus
+      spec:
+        version: "{{ prometheus_image_tag }}"
+        replicas: 1
+        externalUrl: "http://{{ k3s_domain }}/prometheus"
+        retention: 7d
+        resources:
+          limits:
+            cpu: 2000m
+            memory: 2Gi
+          requests:
+            cpu: 200m
+            memory: 512Mi
+        securityContext:
+          fsGroup: 2000
+          runAsNonRoot: true
+          runAsUser: 1000
+        serviceAccountName: prometheus
+        additionalScrapeConfigs:
+          name: prometheus-scrape-config
+          key: prometheus-additional.yml
+        alerting:
+          alertmanagers:
+            - namespace: monitoring
+              name: alertmanager-discovery
+              port: web
+        serviceMonitorSelector: {}
+        nodeSelector:
+          kubernetes.io/hostname: k3s-worker-1
+        storage:
+          volumeClaimTemplate:
+            spec:
+              accessModes:
+                - ReadWriteOnce
+              storageClassName: local-storage
+              resources:
+                requests:
+                  storage: 19G
+
+- name: "Create prometheus service"
+  k8s:
+    state: present
+    definition:
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: prometheus
+        namespace: monitoring
+        labels:
+          app: prometheus
+      spec:
+        type: ClusterIP
+        selector:
+          prometheus: monitoring
+        ports:
+          - name: web
+            port: 9090
+            targetPort: 9090

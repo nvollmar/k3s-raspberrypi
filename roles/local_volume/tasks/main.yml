@@ -1,0 +1,46 @@
+---
+
+- name: "localvolume path facts"
+  set_fact:
+    local_volume_path: "{{ local_volume_root }}/{{ local_volume_name }}"
+    local_volume_mount_path: "{{ local_volume_storage_class_mount_dir }}/{{ local_volume_name }}"
+
+- name: "create local volume file"
+  command: "fallocate -l {{ local_volume_size }} {{ local_volume_path }}"
+
+- name: "format local volume file"
+  command: "mkfs.ext4 -Enodiscard {{ local_volume_path }}"
+
+- name: "create moint point directory"
+  file:
+    path: "{{ local_volume_mount_path }}"
+    state: directory
+
+- name: "mount name fact"
+  set_fact:
+    local_volume_mount_name: "{{ local_volume_mount_path | regex_replace('^\\/', '') | replace('/','-') }}.mount"
+
+- name: "configure local volume file mount point"
+  copy:
+    dest: "/etc/systemd/system/{{ local_volume_mount_name }}"
+    content: |
+      [Unit]
+      Description=A local file volume mount to {{ local_volume_path }}
+      ConditionPathIsMountPoint={{ local_volume_condition_dir }}
+      
+      [Mount]
+      What={{ local_volume_path }}
+      Where={{ local_volume_mount_path }}
+      Type=ext4
+      
+      [Install]
+      WantedBy=multi-user.target
+
+- name: "reload systemd daemon"
+  shell: systemctl daemon-reload
+
+- name: "enable mount"
+  shell: "systemctl enable {{ local_volume_mount_name }}"
+
+- name: "start mount"
+  shell: "systemctl start {{ local_volume_mount_name }}"
